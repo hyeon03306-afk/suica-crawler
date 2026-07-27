@@ -21,9 +21,10 @@ jobs:
         run: |
           pip install requests beautifulsoup4 firebase-admin
 
-          - name: 크롤링 부품(라이브러리) 조립
+      - name: 크롤링 부품(라이브러리) 조립
         run: |
           pip install requests beautifulsoup4 firebase-admin deep-translator
+    
           
       - name: 크롤러 봇 출동! (파이어베이스 업데이트)
         env:
