@@ -60,11 +60,13 @@ def crawl_mcdonalds():
         if date_tag and any(char.isdigit() for char in date_tag.text): 
             date_text = date_tag.text.strip()
 
-        # 🌟 4. 한국어로 번역하기 (실패 시 원본 일본어 유지)
+        # 🌟 4. 한국어로 번역하기 (실패 시 원본 일본어 유지 + 에러 원인 출력)
         try:
             kr_title = translator.translate(title)
             kr_date = translator.translate(date_text)
+            print(f"✅ 번역 성공: {kr_title}") # 성공하면 로그에 띄움
         except Exception as e:
+            print(f"⚠️ 번역 실패 (원인): {e}") # 실패하면 이유를 로그에 띄움
             kr_title = title
             kr_date = date_text
                 
