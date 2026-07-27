@@ -76,4 +76,4 @@ if __name__ == "__main__":
             db.collection("crawled_events").document("mcdonalds").set({"items": data})
             print("파이어베이스 업데이트 완벽 성공! 🚀")
         else:
-            print("🚨 FIREBASE_KEY를 찾을 수 없습니다.")c
+            print("🚨 FIREBASE_KEY를 찾을 수 없습니다.")
