@@ -5,7 +5,9 @@ from firebase_admin import credentials
 from firebase_admin import firestore
 import os
 import json
-from deep_translator import GoogleTranslator # 🌟 번역기 칩 장착!
+import re       # 🌟 날짜 뽑아내는 돋보기 부품
+import time     # 🌟 1초 쉬게 만드는 타이머 부품
+from deep_translator import GoogleTranslator
 
 def crawl_mcdonalds():
     url = "https://www.mcdonalds.co.jp/campaign/"
@@ -15,7 +17,6 @@ def crawl_mcdonalds():
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    # 일한 번역기 준비
     translator = GoogleTranslator(source='ja', target='ko')
     
     cards = soup.select(".campaign-list .campaign-list-item, .container-card-link, article")
@@ -23,7 +24,6 @@ def crawl_mcdonalds():
     seen_titles = set()
 
     for card in cards:
-        # 1. 제목 긁어오기
         title = card.get('data-name', '').strip()
         if not title:
             title_tag = card.select_one("h2, h3, .title, p")
@@ -33,7 +33,6 @@ def crawl_mcdonalds():
         if not title or title in seen_titles:
             continue
             
-        # 2. 이미지 긁어오기
         img_url = ""
         img_tag = card.select_one("img")
         if img_tag:
@@ -54,27 +53,32 @@ def crawl_mcdonalds():
             elif img_url.startswith("/"):
                 img_url = "https://www.mcdonalds.co.jp" + img_url
 
-        # 🌟 3. 날짜(기간) 긁어오기
-        date_text = "진행 중인 이벤트" # 기본값
-        date_tag = card.select_one(".campaign-list-item-date, .date, p")
-        if date_tag and any(char.isdigit() for char in date_tag.text): 
-            date_text = date_tag.text.strip()
+        # 🌟 날짜 핀셋 추출 (정규표현식 사용)
+        date_text = "진행 중인 이벤트"
+        date_match = re.search(r'(\d{1,2}/\d{1,2}\s*\(.*?\))', title)
+        if date_match:
+            date_text = date_match.group(1) + " 부터" # 예: 7/22(水) 부터
+        else:
+            date_tag = card.select_one(".campaign-list-item-date, .date, p")
+            if date_tag and any(char.isdigit() for char in date_tag.text): 
+                date_text = date_tag.text.strip()
 
-        # 🌟 4. 한국어로 번역하기 (실패 시 원본 일본어 유지 + 에러 원인 출력)
+        # 🌟 구글 차단 방지용 1초 대기 후 번역
         try:
+            time.sleep(1.5) # 사람이 하는 것처럼 1.5초 쉬었다가 번역 (핵심!)
             kr_title = translator.translate(title)
             kr_date = translator.translate(date_text)
-            print(f"✅ 번역 성공: {kr_title}") # 성공하면 로그에 띄움
+            print(f"✅ 번역 완료: {kr_title}")
         except Exception as e:
-            print(f"⚠️ 번역 실패 (원인): {e}") # 실패하면 이유를 로그에 띄움
+            print(f"⚠️ 번역 실패: {e}")
             kr_title = title
             kr_date = date_text
                 
         parsed_data.append({
             "category": "🍱 음식점",
             "brand": "맥도날드",
-            "title": kr_title,  # 번역된 제목 저장!
-            "date": kr_date,    # 번역된 날짜 저장!
+            "title": kr_title,  
+            "date": kr_date,    
             "imageUrl": img_url
         })
         seen_titles.add(title)
@@ -84,7 +88,7 @@ def crawl_mcdonalds():
 if __name__ == "__main__":
     print("크롤링 및 번역 시작...")
     data = crawl_mcdonalds()
-    print(f"{len(data)}개의 이벤트 데이터 수집 및 한국어 번역 완료.")
+    print(f"{len(data)}개의 이벤트 수집 및 번역 완료.")
     
     if data:
         firebase_key_str = os.environ.get('FIREBASE_KEY')
@@ -95,6 +99,6 @@ if __name__ == "__main__":
             db = firestore.client()
             
             db.collection("crawled_events").document("mcdonalds").set({"items": data})
-            print("한국어 패치 데이터 파이어베이스 업데이트 성공! 🚀")
+            print("파이어베이스 업데이트 완벽 성공! 🚀")
         else:
             print("🚨 FIREBASE_KEY를 찾을 수 없습니다.")
