@@ -1,0 +1,27 @@
+name: Suica Crawler Auto Update
+
+on:
+  schedule:
+    - cron: '0 */3 * * *' # 정확히 3시간마다 백그라운드에서 자동 실행
+  workflow_dispatch: # 버튼을 눌러서 수동으로 강제 실행할 수 있는 기능 추가
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 소스코드 챙기기
+        uses: actions/checkout@v3
+        
+      - name: 파이썬(Python) 설치
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: 크롤링 부품(라이브러리) 조립
+        run: |
+          pip install requests beautifulsoup4 firebase-admin
+          
+      - name: 크롤러 봇 출동! (파이어베이스 업데이트)
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: python crawler.py
