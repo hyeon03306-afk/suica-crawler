@@ -21,7 +21,8 @@ def crawl_mcdonalds():
     for card in cards:
         title = card.get('data-name', '').strip()
         if not title:
-            title_tag = card.select_first("h2, h3, .title, p")
+            # 🌟 [수정 완료] 파이썬 문법인 select_one으로 변경했습니다!
+            title_tag = card.select_one("h2, h3, .title, p")
             if title_tag:
                 title = title_tag.text.strip()
         
@@ -29,7 +30,8 @@ def crawl_mcdonalds():
             continue
             
         img_url = ""
-        img_tag = card.select_first("img")
+        # 🌟 [수정 완료] 파이썬 문법인 select_one으로 변경했습니다!
+        img_tag = card.select_one("img")
         if img_tag:
             img_url = img_tag.get("data-original", "")
             if not img_url or img_url.startswith("data:"):
@@ -38,7 +40,8 @@ def crawl_mcdonalds():
                 img_url = img_tag.get("src", "")
                 
         if not img_url or img_url.startswith("data:"):
-            source_tag = card.select_first("picture source")
+            # 🌟 [수정 완료] 파이썬 문법인 select_one으로 변경했습니다!
+            source_tag = card.select_one("picture source")
             if source_tag:
                 img_url = source_tag.get("srcset", "").split(",")[0].split(" ")[0].strip()
                 
