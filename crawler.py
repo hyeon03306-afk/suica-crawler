@@ -5,8 +5,8 @@ from firebase_admin import credentials
 from firebase_admin import firestore
 import os
 import json
-import re        # 🌟 날짜 뽑아내는 돋보기 부품
-import time      # 🌟 1초 쉬게 만드는 타이머 부품
+import re
+import time
 from deep_translator import GoogleTranslator
 
 def crawl_mcdonalds():
@@ -33,60 +33,49 @@ def crawl_mcdonalds():
         if not title or title in seen_titles:
             continue
             
-        # 🌟 강력한 이미지 핀셋 업그레이드 (숨겨진 이미지까지 싹 다 찾기)
+        # 🌟 얌전한 방식 폐기! 무식하지만 가장 확실한 '불도저' 추출기 도입
         img_url = ""
+        raw_html = str(card) # 카드의 HTML 전체를 그냥 하나의 통글자로 변환
         
-        # 1. 일반 img 태그 싹 뒤지기
-        img_tag = card.select_one("img")
-        if img_tag:
-            for attr in ["data-original", "data-src", "src"]:
-                temp_url = img_tag.get(attr, "")
-                if temp_url and not temp_url.startswith("data:"):
-                    img_url = temp_url
-                    break
-                    
-        # 2. picture source 태그 뒤지기
-        if not img_url:
-            source_tag = card.select_one("source")
-            if source_tag:
-                temp_url = source_tag.get("srcset", "")
-                if temp_url and not temp_url.startswith("data:"):
-                    img_url = temp_url.split(",")[0].split(" ")[0].strip()
+        # 1. src, data-src, srcset, url() 안에 있는 모든 텍스트 무지성 추출
+        candidates = re.findall(r'(?:src|data-src|data-original|srcset)\s*=\s*[\'"]([^\'"]+)[\'"]', raw_html, re.IGNORECASE)
+        candidates += re.findall(r'url\([\'"]?([^\'"\)]+)[\'"]?\)', raw_html, re.IGNORECASE)
+        
+        # 2. 태그 이름이 뭐든 상관없이 .jpg, .png, .webp 로 끝나는 주소가 있으면 무조건 쓸어담기 (핵심!)
+        candidates += re.findall(r'[\'"]([^\'"]+\.(?:jpg|jpeg|png|webp|gif)[^\'"]*)[\'"]', raw_html, re.IGNORECASE)
 
-        # 3. 만약 배경 이미지(background-image)로 숨겨둔 경우
-        if not img_url:
-            bg_tags = card.select("[style*='background']")
-            for bg in bg_tags:
-                style = bg.get("style", "")
-                match = re.search(r'url\([\'"]?(.*?)[\'"]?\)', style)
-                if match:
-                    temp_url = match.group(1)
-                    if not temp_url.startswith("data:"):
-                        img_url = temp_url
-                        break
-                        
-        if img_url:
+        for candidate in candidates:
+            # srcset처럼 쉼표로 여러 개가 엮여있으면 맨 앞 1개만 깔끔하게 자르기
+            clean_url = candidate.split(',')[0].split(' ')[0].strip()
+            
+            # 쓸모없는 아이콘이나 빈 값은 패스
+            if not clean_url or clean_url.startswith("data:") or clean_url.endswith(".svg"):
+                continue
+                
+            img_url = clean_url
             if img_url.startswith("//"):
                 img_url = "https:" + img_url
             elif img_url.startswith("/"):
                 img_url = "https://www.mcdonalds.co.jp" + img_url
+            break # 📸 진짜 사진 주소를 하나 찾았으면 그 즉시 탈출!
 
-        # 🌟 날짜 핀셋 추출 (정규표현식 사용)
+        # 날짜 핀셋 추출
         date_text = "진행 중인 이벤트"
         date_match = re.search(r'(\d{1,2}/\d{1,2}\s*\(.*?\))', title)
         if date_match:
-            date_text = date_match.group(1) + " 부터" # 예: 7/22(水) 부터
+            date_text = date_match.group(1) + " 부터"
         else:
             date_tag = card.select_one(".campaign-list-item-date, .date, p")
             if date_tag and any(char.isdigit() for char in date_tag.text): 
                 date_text = date_tag.text.strip()
 
-        # 🌟 구글 차단 방지용 1초 대기 후 번역
+        # 번역기 실행
         try:
-            time.sleep(1.5) # 사람이 하는 것처럼 1.5초 쉬었다가 번역 (핵심!)
+            time.sleep(1.5)
             kr_title = translator.translate(title)
             kr_date = translator.translate(date_text)
-            print(f"✅ 번역 완료: {kr_title}")
+            # 로그 창에서 사진을 성공적으로 찾았는지 바로 확인 가능하도록 수정!
+            print(f"✅ 번역 완료: {kr_title} (📸 사진: {'성공!' if img_url else '실패 ㅠㅠ'})")
         except Exception as e:
             print(f"⚠️ 번역 실패: {e}")
             kr_title = title
