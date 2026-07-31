@@ -5,8 +5,8 @@ from firebase_admin import credentials
 from firebase_admin import firestore
 import os
 import json
-import re       # 🌟 날짜 뽑아내는 돋보기 부품
-import time     # 🌟 1초 쉬게 만드는 타이머 부품
+import re        # 🌟 날짜 뽑아내는 돋보기 부품
+import time      # 🌟 1초 쉬게 만드는 타이머 부품
 from deep_translator import GoogleTranslator
 
 def crawl_mcdonalds():
@@ -33,7 +33,8 @@ def crawl_mcdonalds():
         if not title or title in seen_titles:
             continue
             
-       img_url = ""
+        # 🌟 강력한 이미지 핀셋 업그레이드 (숨겨진 이미지까지 싹 다 찾기)
+        img_url = ""
         
         # 1. 일반 img 태그 싹 뒤지기
         img_tag = card.select_one("img")
