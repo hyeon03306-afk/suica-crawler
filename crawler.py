@@ -19,12 +19,18 @@ def crawl_mcdonalds():
     
     translator = GoogleTranslator(source='ja', target='ko')
     
-    cards = soup.select(".campaign-list .campaign-list-item, .container-card-link, article")
+    # 🌟 핵심 수정: <a> 태그 대신, 사진까지 전부 품고 있는 더 큰 부모 박스(.container-card)를 통째로 잡습니다!
+    cards = soup.select(".container-card, .campaign-list-item, article")
     parsed_data = []
     seen_titles = set()
 
     for card in cards:
-        title = card.get('data-name', '').strip()
+        # 1. 제목(Title) 추출 (빈방 a 태그에서 데이터 빼오기)
+        title = ""
+        a_tag = card.select_one("a[data-name]")
+        if a_tag:
+            title = a_tag.get('data-name', '').strip()
+        
         if not title:
             title_tag = card.select_one("h2, h3, .title, p")
             if title_tag:
@@ -33,48 +39,43 @@ def crawl_mcdonalds():
         if not title or title in seen_titles:
             continue
             
-        # 🌟 얌전한 방식 폐기! 무식하지만 가장 확실한 '불도저' 추출기 도입
+        # 2. 이미지(Image) 추출 (이제 큰 박스 안을 뒤지므로 무조건 찾아냅니다!)
         img_url = ""
-        raw_html = str(card) # 카드의 HTML 전체를 그냥 하나의 통글자로 변환
         
-        # 1. src, data-src, srcset, url() 안에 있는 모든 텍스트 무지성 추출
-        candidates = re.findall(r'(?:src|data-src|data-original|srcset)\s*=\s*[\'"]([^\'"]+)[\'"]', raw_html, re.IGNORECASE)
-        candidates += re.findall(r'url\([\'"]?([^\'"\)]+)[\'"]?\)', raw_html, re.IGNORECASE)
-        
-        # 2. 태그 이름이 뭐든 상관없이 .jpg, .png, .webp 로 끝나는 주소가 있으면 무조건 쓸어담기 (핵심!)
-        candidates += re.findall(r'[\'"]([^\'"]+\.(?:jpg|jpeg|png|webp|gif)[^\'"]*)[\'"]', raw_html, re.IGNORECASE)
-
-        for candidate in candidates:
-            # srcset처럼 쉼표로 여러 개가 엮여있으면 맨 앞 1개만 깔끔하게 자르기
-            clean_url = candidate.split(',')[0].split(' ')[0].strip()
+        source_tag = card.select_one("picture source")
+        if source_tag and source_tag.get("srcset"):
+            img_url = source_tag.get("srcset").split(",")[0].strip().split(" ")[0]
             
-            # 쓸모없는 아이콘이나 빈 값은 패스
-            if not clean_url or clean_url.startswith("data:") or clean_url.endswith(".svg"):
-                continue
-                
-            img_url = clean_url
+        if not img_url:
+            img_tag = card.select_one("img")
+            if img_tag:
+                for attr in ["src", "data-src", "data-original"]:
+                    temp_url = img_tag.get(attr, "")
+                    if temp_url and not temp_url.startswith("data:"):
+                        img_url = temp_url
+                        break
+                        
+        if img_url:
             if img_url.startswith("//"):
                 img_url = "https:" + img_url
             elif img_url.startswith("/"):
                 img_url = "https://www.mcdonalds.co.jp" + img_url
-            break # 📸 진짜 사진 주소를 하나 찾았으면 그 즉시 탈출!
 
-        # 날짜 핀셋 추출
+        # 3. 날짜(Date) 추출
         date_text = "진행 중인 이벤트"
         date_match = re.search(r'(\d{1,2}/\d{1,2}\s*\(.*?\))', title)
         if date_match:
             date_text = date_match.group(1) + " 부터"
         else:
-            date_tag = card.select_one(".campaign-list-item-date, .date, p")
+            date_tag = card.select_one(".container-card-text, .date, p")
             if date_tag and any(char.isdigit() for char in date_tag.text): 
                 date_text = date_tag.text.strip()
 
-        # 번역기 실행
+        # 4. 번역 및 결과 출력
         try:
             time.sleep(1.5)
             kr_title = translator.translate(title)
             kr_date = translator.translate(date_text)
-            # 로그 창에서 사진을 성공적으로 찾았는지 바로 확인 가능하도록 수정!
             print(f"✅ 번역 완료: {kr_title} (📸 사진: {'성공!' if img_url else '실패 ㅠㅠ'})")
         except Exception as e:
             print(f"⚠️ 번역 실패: {e}")
