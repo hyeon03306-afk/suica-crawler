@@ -33,20 +33,37 @@ def crawl_mcdonalds():
         if not title or title in seen_titles:
             continue
             
-        img_url = ""
+       img_url = ""
+        
+        # 1. 일반 img 태그 싹 뒤지기
         img_tag = card.select_one("img")
         if img_tag:
-            img_url = img_tag.get("data-original", "")
-            if not img_url or img_url.startswith("data:"):
-                img_url = img_tag.get("data-src", "")
-            if not img_url or img_url.startswith("data:"):
-                img_url = img_tag.get("src", "")
-                
-        if not img_url or img_url.startswith("data:"):
-            source_tag = card.select_one("picture source")
+            for attr in ["data-original", "data-src", "src"]:
+                temp_url = img_tag.get(attr, "")
+                if temp_url and not temp_url.startswith("data:"):
+                    img_url = temp_url
+                    break
+                    
+        # 2. picture source 태그 뒤지기
+        if not img_url:
+            source_tag = card.select_one("source")
             if source_tag:
-                img_url = source_tag.get("srcset", "").split(",")[0].split(" ")[0].strip()
-                
+                temp_url = source_tag.get("srcset", "")
+                if temp_url and not temp_url.startswith("data:"):
+                    img_url = temp_url.split(",")[0].split(" ")[0].strip()
+
+        # 3. 만약 배경 이미지(background-image)로 숨겨둔 경우
+        if not img_url:
+            bg_tags = card.select("[style*='background']")
+            for bg in bg_tags:
+                style = bg.get("style", "")
+                match = re.search(r'url\([\'"]?(.*?)[\'"]?\)', style)
+                if match:
+                    temp_url = match.group(1)
+                    if not temp_url.startswith("data:"):
+                        img_url = temp_url
+                        break
+                        
         if img_url:
             if img_url.startswith("//"):
                 img_url = "https:" + img_url
