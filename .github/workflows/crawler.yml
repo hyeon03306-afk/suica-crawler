@@ -2,8 +2,8 @@ name: Suica Crawler Auto Update
 
 on:
   schedule:
-    - cron: '0 */3 * * *' # 정확히 3시간마다 백그라운드에서 자동 실행
-  workflow_dispatch: # 버튼을 눌러서 수동으로 강제 실행할 수 있는 기능 추가
+    - cron: '0 * * * *' # 매시간 정각(0분)마다 1시간 간격으로 실행
+  workflow_dispatch:
 
 jobs:
   update-data:
