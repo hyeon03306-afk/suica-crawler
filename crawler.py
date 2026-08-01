@@ -188,4 +188,4 @@ if __name__ == "__main__":
         
         print("모든 편의점 파이어베이스 업데이트 완벽 성공! 🚀")
     else:
-        print("🚨 FIREBASE_KEY를 찾을 수 없습니다.")ㄴ
+        print("🚨 FIREBASE_KEY를 찾을 수 없습니다.")
