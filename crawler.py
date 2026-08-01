@@ -14,7 +14,6 @@ SEVEN_ELEVEN_URLS = [
     "https://www.sej.co.jp/products/a/nextweek/"
 ]
 
-# 🌟 사장님이 주신 미니스톱 새 주소로 변경 완료!
 TARGET_SITES = {
     "로손": "https://www.lawson.co.jp/recommend/index.html",
     "패밀리마트": "https://www.family.co.jp/campaign.html",
@@ -34,7 +33,6 @@ def is_spam(text):
             return True
     return False
 
-# 🧠 구글 번역기를 대체하는 똑똑한 DeepL 하이브리드 번역기!
 def smart_translate(text, cache_dict, deepl_key):
     if not text: return ""
     if text in cache_dict:
@@ -59,9 +57,7 @@ def smart_translate(text, cache_dict, deepl_key):
             
     return text 
 
-# DB와 열쇠를 받도록 괄호 안 수정
 def crawl_convenience_stores(db, deepl_key):
-    # 번역 노트 불러오기
     cache_ref = db.collection("system").document("translation_cache")
     cache_doc = cache_ref.get()
     trans_cache = cache_doc.to_dict() if cache_doc.exists else {}
@@ -70,9 +66,6 @@ def crawl_convenience_stores(db, deepl_key):
     all_store_data = {}
     headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
 
-    # ==========================================
-    # 🌟 1. 세븐일레븐 (원본 그대로, 번역만 교체)
-    # ==========================================
     print(f"[세븐일레븐] 크롤링 시작... (현재 번역 노트에 {initial_cache_size}개 기억 중)")
     seven_data = []
     seen_seven_titles = set()
@@ -105,7 +98,6 @@ def crawl_convenience_stores(db, deepl_key):
                     region_tag = item.select_one(".item_region")
                     raw_region = region_tag.text.strip().replace("販売地域：", "").replace("販売地域:", "").strip() if region_tag else ""
 
-                    # DeepL 번역 적용
                     kr_title = smart_translate(raw_title, trans_cache, deepl_key)
                     kr_price = smart_translate(raw_price, trans_cache, deepl_key) if raw_price else ""
                     kr_launch = smart_translate(raw_launch, trans_cache, deepl_key) if raw_launch else ""
@@ -131,16 +123,6 @@ def crawl_convenience_stores(db, deepl_key):
     all_store_data["세븐일레븐"] = seven_data
     print(f"✅ 세븐일레븐: 총 {len(seven_data)}개 수집 완료")
 
-    # ==========================================
-    # 🌟 2. 나머지 편의점 (원본 구조 유지)
-    # ==========================================
-    base_urls = {
-        "로손": "https://www.lawson.co.jp",
-        "패밀리마트": "https://www.family.co.jp",
-        "미니스톱": "https://www.ministop.co.jp",
-        "뉴데이즈": "https://retail.jr-cross.co.jp"
-    }
-
     for brand_name, list_url in TARGET_SITES.items():
         print(f"[{brand_name}] 크롤링 시작...")
         parsed_data = []
@@ -148,24 +130,24 @@ def crawl_convenience_stores(db, deepl_key):
 
         try:
             response = requests.get(list_url, headers=headers, timeout=10)
-            response.encoding = 'utf-8' # 일본어 깨짐 방지
+            response.encoding = 'utf-8'
             if response.status_code != 200: continue
 
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 🍦 미니스톱 전용 타격 로직 (사진 분석 기반)
+            # 🍦 미니스톱 전용 타격 로직 (태그 오타 100% 수정 완료!)
             if brand_name == "미니스톱":
-                cards = soup.select("ul#ProductsListList li")
+                cards = soup.select(".productList li") # 껍데기 수정
                 for card in cards:
                     a_tag = card.select_one("a")
                     item_href = a_tag.get('href') if a_tag else ""
                     item_url = urljoin("https://www.ministop.co.jp", item_href) if item_href else ""
                     
-                    title_tag = card.select_one("div.productListTx span.name")
+                    title_tag = card.select_one(".productListTx .name") # p태그용 클래스명으로 수정
                     raw_title = title_tag.text.strip() if title_tag else ""
                     if not raw_title or is_spam(raw_title) or raw_title in seen_titles: continue
                     
-                    price_tag = card.select_one("div.productListTx span.price")
+                    price_tag = card.select_one(".productListTx .price") # p태그용 클래스명으로 수정
                     raw_price = price_tag.text.strip() if price_tag else ""
                     raw_price = raw_price.replace("税込", "(税込").replace("円", "円)") 
                     
@@ -187,7 +169,7 @@ def crawl_convenience_stores(db, deepl_key):
                         })
                         seen_titles.add(raw_title)
             
-            # 🏪 로손, 패밀리마트, 뉴데이즈 로직 (원본 유지)
+            # 🏪 로손, 패밀리마트, 뉴데이즈 로직
             else:
                 main_content = soup.find('main') or soup.find(id='main') or soup.find(class_='main') or soup
                 cards = main_content.select("article, .card, .item, .campaign-list li, .list li, li a, .box, .product-list li")
@@ -259,11 +241,10 @@ if __name__ == "__main__":
         
         db = firestore.client()
         
-        # 번역을 위해 deepl_key 전달
         data_map = crawl_convenience_stores(db, deepl_key)
 
         for brand, items in data_map.items():
-            if items:
+            if items: # 아이템이 1개라도 있을 때만 파이어베이스에 저장!
                 db.collection("crawled_events").document(brand).set({"items": items})
         print("파이어베이스 업데이트 완료! 🚀")
     else:
