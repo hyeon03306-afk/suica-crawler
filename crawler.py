@@ -20,10 +20,12 @@ TARGET_SITES = {
     "뉴데이즈": "https://retail.jr-cross.co.jp/newdays/product/" 
 }
 
+# 🌟 언어 선택 및 푸터 메뉴 키워드 철저 차단
 BLOCK_KEYWORDS = [
     "アルバイト", "パート", "募集", "採用", "求人", "店舗検索", "会社案内", "加盟店", 
     "お知らせ", "お問合せ", "サイトマップ", "アプリ", "SNS", "オーナー",
-    "아르바이트", "파트타임", "모집", "채용", "구인", "점포", "가맹점", "회사", "공지사항", "문의"
+    "아르바이트", "파트타임", "모집", "채용", "구인", "점포", "가맹점", "회사", "공지사항", "문의",
+    "English", "中国語", "中文", "韓国語", "영어", "중국어", "한국어", "サイトマップ"
 ]
 
 def is_spam(text):
@@ -122,7 +124,6 @@ def crawl_convenience_stores(db, deepl_key):
     all_store_data["세븐일레븐"] = seven_data
     print(f"✅ 세븐일레븐: 총 {len(seven_data)}개 수집 완료")
 
-    # 🚨 사장님 죄송합니다! 제가 아까 이 중요한 base_urls를 날려먹었습니다 ㅠㅠ
     base_urls = {
         "로손": "https://www.lawson.co.jp",
         "패밀리마트": "https://www.family.co.jp",
@@ -154,6 +155,11 @@ def crawl_convenience_stores(db, deepl_key):
 
                 a_tag = card if card.name == 'a' else card.select_one("a")
                 item_href = a_tag.get('href') if a_tag else ""
+
+                # 🌟 다국어, 푸터, 정책 등 쓰레기 링크 원천 차단
+                if any(bad_word in item_href for bad_word in ["/in/", "/english/", "/policy", "/corporate", "/sitemap", "/inquiry"]):
+                    continue
+
                 item_url = urljoin(base_urls.get(brand_name, ""), item_href) if item_href else ""
 
                 date_text = "이벤트 진행중"
