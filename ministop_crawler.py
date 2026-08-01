@@ -6,9 +6,20 @@ from firebase_admin import firestore
 import os
 import json
 import time
+import re
 from urllib.parse import urljoin
 
 MINISTOP_URL = "https://www.ministop.co.jp/syohin/"
+
+BLOCK_KEYWORDS = [
+    "アルバイト", "パート", "募集", "採用", "求人", "店舗検索", "会社案内", "加盟店", 
+    "お知らせ", "お問合せ", "サイトマップ", "アプリ", "SNS", "オーナー", "キャンペーン"
+]
+
+def is_spam(text):
+    for word in BLOCK_KEYWORDS:
+        if word in text: return True
+    return False
 
 def smart_translate(text, cache_dict, deepl_key):
     if not text: return ""
@@ -27,7 +38,7 @@ def smart_translate(text, cache_dict, deepl_key):
     return text 
 
 def crawl_ministop(db, deepl_key):
-    headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+    headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
     cache_ref = db.collection("system").document("translation_cache")
     cache_doc = cache_ref.get()
     trans_cache = cache_doc.to_dict() if cache_doc.exists else {}
@@ -43,22 +54,35 @@ def crawl_ministop(db, deepl_key):
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
-            # 🌟 진짜 F12 구조 반영: div#recommendArea 이하의 li 태그들
-            cards = soup.select("#recommendArea li, .productList li")
+            
+            # 🌟 PC/모바일 상관없이 상품 카드를 찾아내는 만능 선택자
+            cards = soup.select(".productList li, #ProductsListList li, .productList_list li")
             
             for card in cards:
                 a_tag = card.select_one("a")
                 item_href = a_tag.get('href') if a_tag else ""
                 item_url = urljoin("https://www.ministop.co.jp", item_href) if item_href else ""
                 
-                # 🌟 진짜 F12 구조 반영: 클래스가 name, price인 것 찾기
-                title_tag = card.select_one(".name, h3")
-                raw_title = title_tag.text.strip() if title_tag else ""
-                if not raw_title or raw_title in seen_titles: continue
+                raw_title = ""
+                raw_price = ""
                 
-                price_tag = card.select_one(".price")
-                raw_price = price_tag.text.strip() if price_tag else ""
-                raw_price = raw_price.replace("税込", "(税込").replace("円", "円)") 
+                # 🌟 지능형 엑스레이: 텍스트 덩어리를 분석해서 제목과 가격 분리
+                all_text_elements = card.find_all(string=True)
+                for text_node in all_text_elements:
+                    clean_text = text_node.strip()
+                    if not clean_text or len(clean_text) < 2: continue
+                    
+                    # '円'이 들어가면 가격, 아니면 제목으로 간주
+                    if "円" in clean_text or "本体価格" in clean_text or "税込" in clean_text:
+                        raw_price += clean_text + " "
+                    else:
+                        if not raw_title: # 첫 번째 텍스트를 제목으로!
+                            raw_title = clean_text
+
+                raw_price = raw_price.strip().replace("税込", "(税込").replace("円", "円)") 
+                raw_title = re.sub(r'\s+', ' ', raw_title)
+
+                if not raw_title or is_spam(raw_title) or raw_title in seen_titles: continue
                 
                 kr_title = smart_translate(raw_title, trans_cache, deepl_key)
                 kr_price = smart_translate(raw_price, trans_cache, deepl_key) if raw_price else ""
@@ -76,6 +100,7 @@ def crawl_ministop(db, deepl_key):
                     "imageUrl": ""
                 })
                 seen_titles.add(raw_title)
+                print(f"  -> 수집됨: {kr_title} / {kr_price}")
                     
         if len(trans_cache) > initial_cache_size:
             cache_ref.set(trans_cache)
