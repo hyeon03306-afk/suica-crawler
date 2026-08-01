@@ -37,4 +37,5 @@ jobs:
       - name: 패밀리마트 전용 크롤러 봇 출동!
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+          DEEPL_KEY: ${{ secrets.DEEPL_KEY }} # ⬅️ 추가된 부분!
         run: python family_crawler.py
