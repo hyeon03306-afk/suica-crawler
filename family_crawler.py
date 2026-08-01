@@ -10,7 +10,7 @@ import time
 from deep_translator import GoogleTranslator
 from urllib.parse import urljoin
 
-# 패밀리마트 신상품 리스트 타겟 URL
+# 패밀리마트 신상품 리스트 URL
 FAMILY_URL = "https://www.family.co.jp/goods/newgoods.html"
 
 BLOCK_KEYWORDS = [
@@ -27,9 +27,9 @@ def is_spam(text):
 
 def crawl_family_mart():
     translator = GoogleTranslator(source='ja', target='ko')
-    headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+    headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
     
-    print("[패밀리마트] 정밀 타격 크롤링 시작...")
+    print("[패밀리마트] 뼈대 맞춤형 크롤링 시작...")
     family_data = []
     seen_titles = set()
 
@@ -40,12 +40,12 @@ def crawl_family_mart():
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 🌟 수정 포인트 1: 상품을 감싸는 가장 정확한 컨테이너 'div.ly-goods-list-item'만 찾습니다.
-            items = soup.select(".ly-goods-list-item")
+            # 🌟 패밀리마트의 진짜 뼈대 이름: .ly-mod-layout-column
+            items = soup.select(".ly-mod-layout-column")
             
             for item in items:
-                # 1. 제목 (패밀리마트는 항상 h3 클래스로 제품명을 감쌈)
-                title_tag = item.find('h3', class_='ly-goods-list-title')
+                # 1. 제목 (패밀리마트는 무조건 h3 태그 안에 상품명을 넣음)
+                title_tag = item.find('h3')
                 if not title_tag: continue
                 
                 raw_title = title_tag.text.strip()
@@ -53,23 +53,18 @@ def crawl_family_mart():
                 
                 if not raw_title or len(raw_title) < 2 or is_spam(raw_title) or raw_title in seen_titles:
                     continue
-                
-                # 🚫 '영어'라는 단어가 단독으로 들어오는 찌꺼기 차단
-                if raw_title == "영어" or raw_title == "英語":
-                    continue
 
                 # 2. 상세 페이지 링크 (a 태그)
                 a_tag = item.find('a', href=True)
                 item_href = a_tag['href'] if a_tag else ""
                 item_url = urljoin("https://www.family.co.jp", item_href) if item_href else ""
 
-                # 3. 가격 (div.ly-goods-list-price 안의 텍스트)
-                price_tag = item.find('div', class_='ly-goods-list-price')
+                # 3. 가격 (클래스 이름에 'price'가 포함된 모든 태그를 추적!)
+                price_tag = item.select_one("[class*='price']")
                 raw_price = price_tag.text.strip() if price_tag else ""
-                # 패밀리마트 가격 텍스트 깔끔하게 정리 (예: 156円（税込168円） -> 156円 (税込168円))
-                raw_price = raw_price.replace('（', ' (').replace('）', ')')
+                raw_price = raw_price.replace('（', ' (').replace('）', ')') # 괄호 띄어쓰기 예쁘게
 
-                # 4. 출시일 및 지역 고정
+                # 4. 고정 정보
                 raw_launch = "이번 주 신상품"
                 raw_region = "전국 (일부 점포 제외)" 
 
@@ -90,11 +85,11 @@ def crawl_family_mart():
                         "region": raw_region,
                         "itemUrl": item_url,
                         "kcal": "", 
-                        "week": "", # 패밀리마트는 주간 구분이 모호하여 공란
+                        "week": "이번주",
                         "imageUrl": ""
                     })
                     seen_titles.add(raw_title)
-                    print(f"  -> 수집됨: {kr_title} / {kr_price}")
+                    print(f"  -> 정상 수집됨: {kr_title} / {kr_price}")
                     
     except Exception as e:
         print(f"🚨 패밀리마트 에러: {e}")
