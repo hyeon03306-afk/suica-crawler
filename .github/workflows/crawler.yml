@@ -21,21 +21,23 @@ jobs:
         run: |
           pip install requests beautifulsoup4 firebase-admin deep-translator
           
-      # 1번 타자: 세븐일레븐 (및 기타 찌꺼기 방지용)
+      # 1번 타자: 세븐일레븐 
       - name: 세븐일레븐 크롤러 봇 출동!
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+          DEEPL_KEY: ${{ secrets.DEEPL_KEY }} # ⬅️ 추가!
         run: python crawler.py
 
       # 2번 타자: 로손
       - name: 로손 전용 크롤러 봇 출동!
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+          DEEPL_KEY: ${{ secrets.DEEPL_KEY }} # ⬅️ 추가!
         run: python lawson_crawler.py
 
       # 3번 타자: 패밀리마트
       - name: 패밀리마트 전용 크롤러 봇 출동!
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
-          DEEPL_KEY: ${{ secrets.DEEPL_KEY }} # ⬅️ 추가된 부분!
+          DEEPL_KEY: ${{ secrets.DEEPL_KEY }} # ⬅️ (이미 있던 것)
         run: python family_crawler.py
