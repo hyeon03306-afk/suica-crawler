@@ -54,11 +54,9 @@ def crawl_lawson():
     try:
         response = requests.get(target_url, headers=headers, timeout=10)
         
-        # 🌟 글자 깨짐 방지를 위한 인코딩 명시적 강제 변환
-        response.encoding = response.apparent_encoding
-        if not response.encoding or response.encoding.lower() == 'iso-8859-1':
-            response.encoding = 'utf-8'
-            
+        # 🌟 핵심 해결책: 로손 웹사이트 전용 인코딩(shift_jis) 강제 지정!
+        response.encoding = 'shift_jis'
+        
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             items = soup.select("ul.heightLineParent li, .recommend-list li, article, .item, .list li")
@@ -92,9 +90,7 @@ def crawl_lawson():
                 raw_region = "전국 (일부 점포 제외)" 
 
                 try:
-                    # 🌟 번역 전 한 번 더 텍스트 정제
-                    clean_title = raw_title.encode('utf-8', 'ignore').decode('utf-8')
-                    kr_title = translator.translate(clean_title)
+                    kr_title = translator.translate(raw_title)
                     kr_price = translator.translate(raw_price) if raw_price else ""
                     kr_launch = translator.translate(raw_launch) if raw_launch else ""
                     kr_kcal = raw_kcal.replace("当たり", " 당 ").replace("食", "식").replace("個入", "개입")
