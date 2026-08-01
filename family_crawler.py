@@ -10,7 +10,7 @@ import time
 from deep_translator import GoogleTranslator
 from urllib.parse import urljoin
 
-# 🌟 사장님이 알려주신 패밀리마트 신상품 찐 타겟 URL
+# 패밀리마트 신상품 리스트 타겟 URL
 FAMILY_URL = "https://www.family.co.jp/goods/newgoods.html"
 
 BLOCK_KEYWORDS = [
@@ -29,25 +29,23 @@ def crawl_family_mart():
     translator = GoogleTranslator(source='ja', target='ko')
     headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
     
-    print("[패밀리마트] 맞춤형 크롤링 시작...")
+    print("[패밀리마트] 정밀 타격 크롤링 시작...")
     family_data = []
     seen_titles = set()
 
     try:
         response = requests.get(FAMILY_URL, headers=headers, timeout=10)
-        
-        # 패밀리마트는 UTF-8 모범생 사이트! 깨짐 없이 바로 갑니다.
         response.encoding = 'utf-8' 
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 사장님 사진 기반: 정확한 덩어리 클래스 지정 (.ly-mod-layout-column)
-            items = soup.select(".ly-mod-layout-column, .ly-goods-list-item")
+            # 🌟 수정 포인트 1: 상품을 감싸는 가장 정확한 컨테이너 'div.ly-goods-list-item'만 찾습니다.
+            items = soup.select(".ly-goods-list-item")
             
             for item in items:
-                # 1. 제목 (.ly-mod-info-title)
-                title_tag = item.select_one(".ly-mod-info-title, .ly-goods-name")
+                # 1. 제목 (패밀리마트는 항상 h3 클래스로 제품명을 감쌈)
+                title_tag = item.find('h3', class_='ly-goods-list-title')
                 if not title_tag: continue
                 
                 raw_title = title_tag.text.strip()
@@ -55,20 +53,24 @@ def crawl_family_mart():
                 
                 if not raw_title or len(raw_title) < 2 or is_spam(raw_title) or raw_title in seen_titles:
                     continue
+                
+                # 🚫 '영어'라는 단어가 단독으로 들어오는 찌꺼기 차단
+                if raw_title == "영어" or raw_title == "英語":
+                    continue
 
-                # 2. 상세 페이지 링크 
-                a_tag = item.select_one("a")
-                item_href = a_tag.get('href') if a_tag else ""
+                # 2. 상세 페이지 링크 (a 태그)
+                a_tag = item.find('a', href=True)
+                item_href = a_tag['href'] if a_tag else ""
                 item_url = urljoin("https://www.family.co.jp", item_href) if item_href else ""
 
-                # 3. 가격 (.ly-mod-info-price)
-                price_tag = item.select_one(".ly-mod-info-price, .ly-goods-price")
+                # 3. 가격 (div.ly-goods-list-price 안의 텍스트)
+                price_tag = item.find('div', class_='ly-goods-list-price')
                 raw_price = price_tag.text.strip() if price_tag else ""
+                # 패밀리마트 가격 텍스트 깔끔하게 정리 (예: 156円（税込168円） -> 156円 (税込168円))
+                raw_price = raw_price.replace('（', ' (').replace('）', ')')
 
-                # 4. 출시일 (패밀리마트는 상단에 주간 날짜를 적어둬서 기본값으로 통일)
+                # 4. 출시일 및 지역 고정
                 raw_launch = "이번 주 신상품"
-
-                # 5. 지역 (전국 통일)
                 raw_region = "전국 (일부 점포 제외)" 
 
                 try:
@@ -86,13 +88,13 @@ def crawl_family_mart():
                         "price": kr_price,
                         "date": raw_launch,
                         "region": raw_region,
-                        "itemUrl": item_url, # ⬅️ 완벽하게 긁어온 상세 링크!
-                        "kcal": "", # 패밀리마트 메인에는 칼로리 없음
-                        "week": "", 
+                        "itemUrl": item_url,
+                        "kcal": "", 
+                        "week": "", # 패밀리마트는 주간 구분이 모호하여 공란
                         "imageUrl": ""
                     })
                     seen_titles.add(raw_title)
-                    print(f"  -> 수집됨: {kr_title}")
+                    print(f"  -> 수집됨: {kr_title} / {kr_price}")
                     
     except Exception as e:
         print(f"🚨 패밀리마트 에러: {e}")
@@ -110,7 +112,6 @@ if __name__ == "__main__":
             firebase_admin.initialize_app(cred)
         db = firestore.client()
         
-        # '패밀리마트' 문서에 차곡차곡 저장!
         db.collection("crawled_events").document("패밀리마트").set({"items": family_items})
         print(f"✅ 패밀리마트 파이어베이스 업데이트 성공! (총 {len(family_items)}개) 🚀")
     else:
