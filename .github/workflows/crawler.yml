@@ -3,7 +3,7 @@ name: Suica Crawler Auto Update
 on:
   schedule:
     - cron: '0 * * * *' # 매시간 정각(0분)마다 1시간 간격으로 실행
-  workflow_dispatch:
+  workflow_dispatch: # 수동으로 버튼 눌러서 실행 가능하게 해주는 옵션
 
 jobs:
   update-data:
@@ -21,12 +21,20 @@ jobs:
         run: |
           pip install requests beautifulsoup4 firebase-admin deep-translator
           
-      - name: 세븐일레븐(및 기타) 크롤러 봇 출동!
+      # 1번 타자: 세븐일레븐 (및 기타 찌꺼기 방지용)
+      - name: 세븐일레븐 크롤러 봇 출동!
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
         run: python crawler.py
 
+      # 2번 타자: 로손
       - name: 로손 전용 크롤러 봇 출동!
         env:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
         run: python lawson_crawler.py
+
+      # 3번 타자: 패밀리마트
+      - name: 패밀리마트 전용 크롤러 봇 출동!
+        env:
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+        run: python family_crawler.py
