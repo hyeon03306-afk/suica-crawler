@@ -9,14 +9,21 @@ import re
 import time
 from deep_translator import GoogleTranslator
 
-# 편의점별 이벤트 URL 정보
+# 🌟 사장님이 직접 주신 5대 편의점 최신 타겟 주소 완벽 적용!
 TARGET_SITES = {
     "세븐일레븐": "https://www.sej.co.jp/cmp/",
-    "로손": "https://www.lawson.co.jp/recommend/campaign/",
+    "로손": "https://www.lawson.co.jp/recommend/index.html",
     "패밀리마트": "https://www.family.co.jp/campaign.html",
     "미니스톱": "https://www.ministop.co.jp/corporate/campaign/",
-    "뉴데이즈": "https://waters.jr-cross.co.jp/campaign/" # 또는 일반 캠페인 페이지
+    "뉴데이즈": "https://retail.jr-cross.co.jp/newdays/product/" 
 }
+
+# 🚫 봇이 무조건 걸러내는 쓰레기 단어 블랙리스트 (아르바이트 등)
+BLOCK_KEYWORDS = [
+    "アルバイト", "パート", "募集", "採用", "求人", "店舗検索", "会社案内", "加盟店", 
+    "お知らせ", "お問合せ", "サイトマップ", "アプリ", "SNS", "オーナー",
+    "아르바이트", "파트타임", "모집", "채용", "구인", "점포", "가맹점", "회사", "공지사항", "문의"
+]
 
 def crawl_convenience_stores():
     translator = GoogleTranslator(source='ja', target='ko')
@@ -39,10 +46,13 @@ def crawl_convenience_stores():
 
             soup = BeautifulSoup(response.text, 'html.parser')
             
+            # 🌟 홈페이지 맨 밑바닥(푸터)의 알바 공고를 피하기 위해 본문(main) 구역만 집중 탐색
+            main_content = soup.find('main') or soup.find(id='main') or soup.find(class_='main') or soup
+
             # 각 편의점 사이트 공통 카드/리스트 요소 선택자 광범위 탐색
-            cards = soup.select("article, .card, .item, .campaign-list li, .list li, li a, .box")
+            cards = main_content.select("article, .card, .item, .campaign-list li, .list li, li a, .box, .product-list li")
             if not cards:
-                cards = soup.select("a") # 태그가 안 잡히면 링크형태로 탐색
+                cards = main_content.select("a") # 태그가 안 잡히면 링크형태로 탐색
 
             for card in cards:
                 title = ""
@@ -52,13 +62,24 @@ def crawl_convenience_stores():
                     title = title_tag.text.strip()
                 elif card.name == 'a' and len(card.text.strip()) > 5:
                     title = card.text.strip()
+                
+                title = re.sub(r'\s+', ' ', title).strip() # 지저분한 줄바꿈/공백 한 줄로 깔끔하게 정리
 
                 # 너무 짧거나 중복된 제목 필터링
                 if not title or len(title) < 4 or title in seen_titles:
                     continue
 
+                # 🛑 1차 방어선: 일본어 원본 제목에 알바, 구인 등의 단어가 있으면 버리기!
+                is_spam = False
+                for block_word in BLOCK_KEYWORDS:
+                    if block_word in title:
+                        is_spam = True
+                        break
+                if is_spam:
+                    continue
+
                 # 날짜 핀셋 추출
-                date_text = "진행 중인 이벤트"
+                date_text = "이벤트 진행중"
                 date_match = re.search(r'(\d{1,2}/\d{1,2}\s*\(.*?\))', title)
                 if date_match:
                     date_text = date_match.group(1) + " 부터"
@@ -75,6 +96,14 @@ def crawl_convenience_stores():
                 except:
                     kr_title = title
                     kr_date = date_text
+
+                # 🛑 2차 방어선: 한국어로 번역된 제목에도 이상한 단어가 들어있으면 버리기!
+                for block_word in BLOCK_KEYWORDS:
+                    if block_word in kr_title:
+                        is_spam = True
+                        break
+                if is_spam:
+                    continue
 
                 parsed_data.append({
                     "category": "🏪 편의점",
