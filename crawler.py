@@ -14,9 +14,10 @@ SEVEN_ELEVEN_URLS = [
     "https://www.sej.co.jp/products/a/nextweek/"
 ]
 
-# 🚨 빡침의 원흉이었던 로손, 패밀리마트 주소 완전 삭제! 
-# (이제 메인 봇은 미니스톱과 뉴데이즈만 긁어옵니다.)
+# 🚨 사장님 원본 그대로 원상복구 완료! 로손, 패밀리마트 다시 살렸습니다.
 TARGET_SITES = {
+    "로손": "https://www.lawson.co.jp/recommend/index.html",
+    "패밀리마트": "https://www.family.co.jp/campaign.html",
     "미니스톱": "https://www.ministop.co.jp/corporate/campaign/",
     "뉴데이즈": "https://retail.jr-cross.co.jp/newdays/product/" 
 }
@@ -33,6 +34,7 @@ def is_spam(text):
             return True
     return False
 
+# 🧠 똑똑한 하이브리드 번역기 (DeepL + 파이어베이스 기억력)
 def smart_translate(text, cache_dict, deepl_key):
     if not text: return ""
     if text in cache_dict:
@@ -66,6 +68,9 @@ def crawl_convenience_stores(db, deepl_key):
     all_store_data = {}
     headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
 
+    # ==========================================
+    # 🌟 1. 세븐일레븐
+    # ==========================================
     print(f"[세븐일레븐] 크롤링 시작... (현재 번역 노트에 {initial_cache_size}개 기억 중)")
     seven_data = []
     seen_seven_titles = set()
@@ -123,6 +128,16 @@ def crawl_convenience_stores(db, deepl_key):
     all_store_data["세븐일레븐"] = seven_data
     print(f"✅ 세븐일레븐: 총 {len(seven_data)}개 수집 완료")
 
+    # ==========================================
+    # 🌟 2. 나머지 편의점 (사장님 원본 그대로!)
+    # ==========================================
+    base_urls = {
+        "로손": "https://www.lawson.co.jp",
+        "패밀리마트": "https://www.family.co.jp",
+        "미니스톱": "https://www.ministop.co.jp",
+        "뉴데이즈": "https://retail.jr-cross.co.jp"
+    }
+
     for brand_name, list_url in TARGET_SITES.items():
         print(f"[{brand_name}] 크롤링 시작...")
         parsed_data = []
@@ -148,7 +163,7 @@ def crawl_convenience_stores(db, deepl_key):
 
                 a_tag = card if card.name == 'a' else card.select_one("a")
                 item_href = a_tag.get('href') if a_tag else ""
-                item_url = urljoin("https://www.ministop.co.jp" if brand_name=="미니스톱" else "https://retail.jr-cross.co.jp", item_href) if item_href else ""
+                item_url = urljoin(base_urls.get(brand_name, ""), item_href) if item_href else ""
 
                 date_text = "이벤트 진행중"
                 date_match = re.search(r'(\d{1,2}/\d{1,2}\s*\(.*?\))', title)
@@ -190,6 +205,8 @@ def crawl_convenience_stores(db, deepl_key):
     return all_store_data
 
 if __name__ == "__main__":
+    print("편의점 통합 크롤링 시작...")
+    
     firebase_key_str = os.environ.get('FIREBASE_KEY')
     deepl_key = os.environ.get('DEEPL_KEY')
     
@@ -200,8 +217,7 @@ if __name__ == "__main__":
             firebase_admin.initialize_app(cred)
         
         db = firestore.client()
-
-        print("편의점 통합 크롤링 시작...")
+        
         data_map = crawl_convenience_stores(db, deepl_key)
 
         for brand, items in data_map.items():
