@@ -1,5 +1,4 @@
 import requests
-from bs4 import BeautifulSoup
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
@@ -9,7 +8,8 @@ import time
 import re
 from urllib.parse import urljoin
 
-MINISTOP_URL = "https://www.ministop.co.jp/syohin/"
+# 🌟 미니스톱 자바스크립트가 실제로 데이터를 가져오는 진짜 API 주소
+MINISTOP_API_URL = "https://www.ministop.co.jp/syohin/json/s_syohin_thisweek.json"
 
 BLOCK_KEYWORDS = [
     "アルバイト", "パート", "募集", "採用", "求人", "店舗検索", "会社案内", "加盟店", 
@@ -38,11 +38,9 @@ def smart_translate(text, cache_dict, deepl_key):
     return text 
 
 def crawl_ministop(db, deepl_key):
-    # 봇 차단을 뚫기 위한 강력한 변장 도구 (User-Agent)
     headers = { 
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-        "Accept-Language": "ko-KR,ko;q=0.9,ja;q=0.8,en-US;q=0.7,en;q=0.6"
+        "Referer": "https://www.ministop.co.jp/syohin/"
     }
     
     cache_ref = db.collection("system").document("translation_cache")
@@ -55,35 +53,29 @@ def crawl_ministop(db, deepl_key):
     seen_titles = set()
 
     try:
-        response = requests.get(MINISTOP_URL, headers=headers, timeout=10)
-        response.encoding = 'utf-8' # 일본어 깨짐 방지
+        # 🌟 HTML이 아니라 데이터를 담고 있는 JSON을 직접 요청!
+        response = requests.get(MINISTOP_API_URL, headers=headers, timeout=10)
+        response.encoding = 'utf-8'
         
         if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # 🌟 사장님이 맨 처음 찾아주셨던 정확한 구조로 다시 돌아왔습니다!
-            cards = soup.select("ul#ProductsListList li")
-            
-            # 혹시 모바일 화면으로 인식되었을 경우를 대비한 보험 플랜
-            if not cards:
-                cards = soup.select(".productList li")
-            
-            for card in cards:
-                a_tag = card.select_one("a")
-                item_href = a_tag.get('href') if a_tag else ""
-                item_url = urljoin("https://www.ministop.co.jp", item_href) if item_href else ""
+            json_text = response.text.strip()
+            if json_text.startswith('\ufeff'):
+                json_text = json_text[1:]
                 
-                # 제목 찾기 (span.name 또는 p.name)
-                title_tag = card.select_one("span.name, p.name")
-                raw_title = title_tag.text.strip() if title_tag else ""
+            items = json.loads(json_text)
+            
+            for item in items:
+                raw_title = item.get("name", "").strip()
                 raw_title = re.sub(r'\s+', ' ', raw_title)
-
+                
                 if not raw_title or is_spam(raw_title) or raw_title in seen_titles: continue
                 
-                # 가격 찾기 (span.price 또는 p.price)
-                price_tag = card.select_one("span.price, p.price")
-                raw_price = price_tag.text.strip() if price_tag else ""
-                raw_price = raw_price.replace("税込", "(税込").replace("円", "円)") 
+                raw_price = item.get("price", "").strip()
+                if raw_price:
+                    raw_price = f"{raw_price}円(税込)"
+                
+                item_href = item.get("link", "")
+                item_url = urljoin("https://www.ministop.co.jp", item_href) if item_href else ""
                 
                 kr_title = smart_translate(raw_title, trans_cache, deepl_key)
                 kr_price = smart_translate(raw_price, trans_cache, deepl_key) if raw_price else ""
