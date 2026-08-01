@@ -55,34 +55,25 @@ def crawl_ministop(db, deepl_key):
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 🌟 PC/모바일 상관없이 상품 카드를 찾아내는 만능 선택자
-            cards = soup.select(".productList li, #ProductsListList li, .productList_list li")
+            # 🌟 사장님이 찍어주신 진짜 F12 구조 (productList 안의 li 들을 찾습니다)
+            cards = soup.select(".productList li")
             
             for card in cards:
                 a_tag = card.select_one("a")
                 item_href = a_tag.get('href') if a_tag else ""
                 item_url = urljoin("https://www.ministop.co.jp", item_href) if item_href else ""
                 
-                raw_title = ""
-                raw_price = ""
-                
-                # 🌟 지능형 엑스레이: 텍스트 덩어리를 분석해서 제목과 가격 분리
-                all_text_elements = card.find_all(string=True)
-                for text_node in all_text_elements:
-                    clean_text = text_node.strip()
-                    if not clean_text or len(clean_text) < 2: continue
-                    
-                    # '円'이 들어가면 가격, 아니면 제목으로 간주
-                    if "円" in clean_text or "本体価格" in clean_text or "税込" in clean_text:
-                        raw_price += clean_text + " "
-                    else:
-                        if not raw_title: # 첫 번째 텍스트를 제목으로!
-                            raw_title = clean_text
-
-                raw_price = raw_price.strip().replace("税込", "(税込").replace("円", "円)") 
+                # 🌟 진짜 F12 구조: span.name -> span 태그인데 클래스가 name인 것
+                title_tag = card.select_one("span.name")
+                raw_title = title_tag.text.strip() if title_tag else ""
                 raw_title = re.sub(r'\s+', ' ', raw_title)
 
                 if not raw_title or is_spam(raw_title) or raw_title in seen_titles: continue
+                
+                # 🌟 진짜 F12 구조: span.price -> span 태그인데 클래스가 price인 것
+                price_tag = card.select_one("span.price")
+                raw_price = price_tag.text.strip() if price_tag else ""
+                raw_price = raw_price.replace("税込", "(税込").replace("円", "円)") 
                 
                 kr_title = smart_translate(raw_title, trans_cache, deepl_key)
                 kr_price = smart_translate(raw_price, trans_cache, deepl_key) if raw_price else ""
