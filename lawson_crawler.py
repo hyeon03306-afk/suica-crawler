@@ -54,66 +54,69 @@ def crawl_lawson():
     try:
         response = requests.get(target_url, headers=headers, timeout=10)
         
-        # 🌟 핵심 해결책: 로손 웹사이트 전용 인코딩(shift_jis) 강제 지정!
-        response.encoding = 'shift_jis'
+        # 🌟 원인 분석 적용: 찌그러진 바이트를 바르게 정렬하는 세탁기 로직
+        response.encoding = 'utf-8'
+        raw_html = response.text
         
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            items = soup.select("ul.heightLineParent li, .recommend-list li, article, .item, .list li")
+        # BeautifulSoup 파싱 시 인코딩 간섭 원천 차단
+        soup = BeautifulSoup(raw_html, 'html.parser')
+        items = soup.select("ul.heightLineParent li, .recommend-list li, article, .item, .list li")
+        
+        for item in items:
+            title_tag = item.select_one("p.ttl, .ttl, .name")
+            if not title_tag: continue
             
-            for item in items:
-                title_tag = item.select_one("p.ttl, .ttl, .name")
-                if not title_tag: continue
+            # 🌟 텍스트를 뽑자마자 바이트 깨짐 현상을 강제로 바로잡는 정제 과정
+            raw_title = title_tag.text.encode('latin1', errors='ignore').decode('utf-8', errors='ignore')
+            raw_title = re.sub(r'\s+', ' ', raw_title).strip()
+            
+            if not raw_title or len(raw_title) < 2 or is_spam(raw_title) or raw_title in seen_titles:
+                continue
+
+            a_tag = item.select_one("a")
+            item_href = a_tag.get('href') if a_tag else ""
+            item_url = urljoin("https://www.lawson.co.jp", item_href) if item_href else ""
+
+            price_tag = item.select_one("p.price, .price")
+            raw_price = price_tag.text.encode('latin1', errors='ignore').decode('utf-8', errors='ignore').strip() if price_tag else ""
+
+            date_tag = item.select_one("p.date, .date")
+            raw_launch = date_tag.text.encode('latin1', errors='ignore').decode('utf-8', errors='ignore').strip() if date_tag else "이번 주 신상품"
+
+            raw_kcal = ""
+            for p_tag in item.find_all('p'):
+                p_text = p_tag.text.encode('latin1', errors='ignore').decode('utf-8', errors='ignore')
+                if 'kcal' in p_text.lower():
+                    raw_kcal = p_text.strip()
+                    break
+            
+            raw_region = "전국 (일부 점포 제외)" 
+
+            try:
+                kr_title = translator.translate(raw_title)
+                kr_price = translator.translate(raw_price) if raw_price else ""
+                kr_launch = translator.translate(raw_launch) if raw_launch else ""
+                kr_kcal = raw_kcal.replace("当たり", " 당 ").replace("食", "식").replace("個入", "개입")
+                time.sleep(0.5) 
+            except:
+                kr_title, kr_price, kr_launch, kr_kcal = raw_title, raw_price, raw_launch, raw_kcal
+
+            if not is_spam(kr_title):
+                lawson_data.append({
+                    "category": "🏪 편의점",
+                    "brand": "로손",
+                    "title": kr_title,
+                    "price": kr_price,
+                    "date": kr_launch,
+                    "region": raw_region,
+                    "itemUrl": item_url,
+                    "kcal": kr_kcal, 
+                    "week": "이번주", 
+                    "imageUrl": ""
+                })
+                seen_titles.add(raw_title)
+                print(f"  -> 정상 수집됨: {kr_title} / {kr_kcal}")
                 
-                raw_title = title_tag.text.strip()
-                raw_title = re.sub(r'\s+', ' ', raw_title)
-                
-                if not raw_title or len(raw_title) < 2 or is_spam(raw_title) or raw_title in seen_titles:
-                    continue
-
-                a_tag = item.select_one("a")
-                item_href = a_tag.get('href') if a_tag else ""
-                item_url = urljoin("https://www.lawson.co.jp", item_href) if item_href else ""
-
-                price_tag = item.select_one("p.price, .price")
-                raw_price = price_tag.text.strip() if price_tag else ""
-
-                date_tag = item.select_one("p.date, .date")
-                raw_launch = date_tag.text.strip() if date_tag else "이번 주 신상품"
-
-                raw_kcal = ""
-                for p_tag in item.find_all('p'):
-                    if 'kcal' in p_tag.text.lower():
-                        raw_kcal = p_tag.text.strip()
-                        break
-                
-                raw_region = "전국 (일부 점포 제외)" 
-
-                try:
-                    kr_title = translator.translate(raw_title)
-                    kr_price = translator.translate(raw_price) if raw_price else ""
-                    kr_launch = translator.translate(raw_launch) if raw_launch else ""
-                    kr_kcal = raw_kcal.replace("当たり", " 당 ").replace("食", "식").replace("個入", "개입")
-                    time.sleep(0.5) 
-                except:
-                    kr_title, kr_price, kr_launch, kr_kcal = raw_title, raw_price, raw_launch, raw_kcal
-
-                if not is_spam(kr_title):
-                    lawson_data.append({
-                        "category": "🏪 편의점",
-                        "brand": "로손",
-                        "title": kr_title,
-                        "price": kr_price,
-                        "date": kr_launch,
-                        "region": raw_region,
-                        "itemUrl": item_url,
-                        "kcal": kr_kcal, 
-                        "week": "이번주", 
-                        "imageUrl": ""
-                    })
-                    seen_titles.add(raw_title)
-                    print(f"  -> 수집됨: {kr_title} / {kr_kcal}")
-                    
     except Exception as e:
         print(f"🚨 로손 에러: {e}")
         
