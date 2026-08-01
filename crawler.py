@@ -38,7 +38,7 @@ TARGET_SITES = {
 
     "패밀리마트": "https://www.family.co.jp/campaign.html",
 
-    "미니스톱": "https://www.ministop.co.jp/corporate/campaign/",
+    "미니스톱": "https://www.ministop.co.jp/syohin/",
 
     "뉴데이즈": "https://retail.jr-cross.co.jp/newdays/product/" 
 
