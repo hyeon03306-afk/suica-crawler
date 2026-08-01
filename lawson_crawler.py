@@ -10,7 +10,6 @@ import time
 from deep_translator import GoogleTranslator
 from urllib.parse import urljoin
 
-# 🌟 로손 신상품 메인 로비 (여기서 봇이 최신 주소를 스스로 찾아냅니다!)
 LAWSON_BASE_NEW_URL = "https://www.lawson.co.jp/recommend/new/"
 
 BLOCK_KEYWORDS = [
@@ -25,7 +24,6 @@ def is_spam(text):
             return True
     return False
 
-# 🌟 최신 신상품 주소 자동 탐지기
 def get_latest_lawson_url():
     headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
     try:
@@ -33,15 +31,12 @@ def get_latest_lawson_url():
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # 8/4 발매, 7/28 발매 등 탭에서 가장 첫 번째(최신) 링크를 찾습니다.
         for a_tag in soup.find_all('a', href=True):
             if '/recommend/new/list/' in a_tag['href']:
                 latest_url = urljoin("https://www.lawson.co.jp", a_tag['href'])
                 print(f"[자동 탐지] 이번 주 로손 최신 주소 발견: {latest_url}")
                 return latest_url
                 
-        # 만약 못 찾으면 사장님이 주셨던 기본 주소(또는 메인 로비)로 돌아갑니다.
-        print("[자동 탐지] 최신 링크를 찾지 못해 기본 로비로 접속합니다.")
         return LAWSON_BASE_NEW_URL
     except Exception as e:
         print(f"🚨 주소 탐지 에러: {e}")
@@ -51,20 +46,21 @@ def crawl_lawson():
     translator = GoogleTranslator(source='ja', target='ko')
     headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
     
-    # 봇이 알아서 최신 타겟 주소를 장전합니다!
     target_url = get_latest_lawson_url()
-    
     print(f"[로손] 맞춤형 크롤링 시작... ({target_url})")
     lawson_data = []
     seen_titles = set()
 
     try:
         response = requests.get(target_url, headers=headers, timeout=10)
-        response.encoding = 'utf-8' 
         
+        # 🌟 글자 깨짐 방지를 위한 인코딩 명시적 강제 변환
+        response.encoding = response.apparent_encoding
+        if not response.encoding or response.encoding.lower() == 'iso-8859-1':
+            response.encoding = 'utf-8'
+            
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
-            
             items = soup.select("ul.heightLineParent li, .recommend-list li, article, .item, .list li")
             
             for item in items:
@@ -77,7 +73,6 @@ def crawl_lawson():
                 if not raw_title or len(raw_title) < 2 or is_spam(raw_title) or raw_title in seen_titles:
                     continue
 
-                # 💡 개별 상품 상세 링크 (누르면 바로 넘어가는 그 주소!)
                 a_tag = item.select_one("a")
                 item_href = a_tag.get('href') if a_tag else ""
                 item_url = urljoin("https://www.lawson.co.jp", item_href) if item_href else ""
@@ -97,7 +92,9 @@ def crawl_lawson():
                 raw_region = "전국 (일부 점포 제외)" 
 
                 try:
-                    kr_title = translator.translate(raw_title)
+                    # 🌟 번역 전 한 번 더 텍스트 정제
+                    clean_title = raw_title.encode('utf-8', 'ignore').decode('utf-8')
+                    kr_title = translator.translate(clean_title)
                     kr_price = translator.translate(raw_price) if raw_price else ""
                     kr_launch = translator.translate(raw_launch) if raw_launch else ""
                     kr_kcal = raw_kcal.replace("当たり", " 당 ").replace("食", "식").replace("個入", "개입")
@@ -113,12 +110,13 @@ def crawl_lawson():
                         "price": kr_price,
                         "date": kr_launch,
                         "region": raw_region,
-                        "itemUrl": item_url, # ⬅️ 안드로이드 앱이 이걸 받아서 쏩니다!
+                        "itemUrl": item_url,
                         "kcal": kr_kcal, 
-                        "week": "이번주", # 탭 분류용
+                        "week": "이번주", 
                         "imageUrl": ""
                     })
                     seen_titles.add(raw_title)
+                    print(f"  -> 수집됨: {kr_title} / {kr_kcal}")
                     
     except Exception as e:
         print(f"🚨 로손 에러: {e}")
