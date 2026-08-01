@@ -9,7 +9,12 @@ import re
 import time
 from deep_translator import GoogleTranslator
 
-# 세븐일레븐은 이번주/다음주 신상품 페이지를 각각 타겟팅합니다.
+# 🌟 세븐일레븐 이번주, 다음주 신상 주소 완벽 적용
+SEVEN_ELEVEN_URLS = [
+    "https://www.sej.co.jp/products/a/thisweek/",
+    "https://www.sej.co.jp/products/a/nextweek/"
+]
+
 TARGET_SITES = {
     "로손": "https://www.lawson.co.jp/recommend/index.html",
     "패밀리마트": "https://www.family.co.jp/campaign.html",
@@ -17,20 +22,15 @@ TARGET_SITES = {
     "뉴데이즈": "https://retail.jr-cross.co.jp/newdays/product/" 
 }
 
-SEVEN_ELEVEN_URLS = [
-    "https://www.sej.co.jp/products/a/thisweek/",
-    "https://www.sej.co.jp/products/a/nextweek/"
-]
-
 BLOCK_KEYWORDS = [
     "アルバイト", "パート", "募集", "採用", "求人", "店舗検索", "会社案内", "加盟店", 
     "お知らせ", "お問合せ", "サイトマップ", "アプリ", "SNS", "オーナー",
     "아르바이트", "파트타임", "모집", "채용", "구인", "점포", "가맹점", "회사", "공지사항", "문의"
 ]
 
-def is_spam(title_text):
-    for block_word in BLOCK_KEYWORDS:
-        if block_word in title_text:
+def is_spam(text):
+    for word in BLOCK_KEYWORDS:
+        if word in text:
             return True
     return False
 
@@ -43,7 +43,7 @@ def crawl_convenience_stores():
     }
 
     # ==========================================
-    # 🌟 1. 세븐일레븐 신상품 전용 크롤링
+    # 🌟 1. 세븐일레븐 '신상품' 싹쓸이 정밀 분석 (제한 없음)
     # ==========================================
     print("[세븐일레븐] 크롤링 시작...")
     seven_data = []
@@ -54,7 +54,6 @@ def crawl_convenience_stores():
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
-                # 엑스레이 사진 참고: .list_inner 안의 디테일을 뒤집니다.
                 items = soup.select(".list_inner .detail")
                 
                 for item in items:
@@ -66,54 +65,47 @@ def crawl_convenience_stores():
                     if is_spam(raw_title) or raw_title in seen_seven_titles:
                         continue
                         
-                    # 가격, 날짜, 지역 추출
+                    # 💡 사장님 지시대로 가격, 날짜, 지역을 철저하게 '분리' 추출
                     price_tag = item.select_one(".item_price")
-                    price_text = price_tag.text.strip() if price_tag else ""
+                    raw_price = price_tag.text.strip() if price_tag else ""
                     
                     launch_tag = item.select_one(".item_launch")
-                    launch_text = launch_tag.text.strip() if launch_tag else ""
+                    raw_launch = launch_tag.text.strip() if launch_tag else ""
                     
                     region_tag = item.select_one(".item_region")
-                    region_text = region_tag.text.strip() if region_tag else ""
-
-                    # 깔끔하게 합치기 (예: "2026년 07월 28일 (화) 이후 순차 발매 | 지역: 홋카이도")
-                    full_date_info = launch_text
-                    if region_text:
-                        full_date_info += f" | {region_text}"
+                    # "販売地域：" 글자를 떼어내고 순수 지역명만 추출
+                    raw_region = region_tag.text.strip().replace("販売地域：", "").replace("販売地域:", "").strip() if region_tag else ""
 
                     try:
-                        time.sleep(1.0)
                         kr_title = translator.translate(raw_title)
-                        kr_price = translator.translate(price_text)
-                        kr_date_info = translator.translate(full_date_info)
+                        kr_price = translator.translate(raw_price) if raw_price else ""
+                        kr_launch = translator.translate(raw_launch) if raw_launch else ""
+                        kr_region = translator.translate(raw_region) if raw_region else ""
+                        time.sleep(0.5) # 번역기 밴 방지 (살짝 빠르게)
                     except:
-                        kr_title = raw_title
-                        kr_price = price_text
-                        kr_date_info = full_date_info
+                        kr_title, kr_price, kr_launch, kr_region = raw_title, raw_price, raw_launch, raw_region
 
-                    # 최종 제목에 가격 합치기
-                    final_title = f"{kr_title} ({kr_price})"
-                    
-                    if not is_spam(final_title):
+                    if not is_spam(kr_title):
                         seven_data.append({
                             "category": "🏪 편의점",
                             "brand": "세븐일레븐",
-                            "title": final_title,
-                            "date": kr_date_info,
+                            "title": kr_title,
+                            "price": kr_price,   # ⬅️ 가격 분리 추가
+                            "date": kr_launch,
+                            "region": kr_region, # ⬅️ 지역 분리 추가
                             "imageUrl": ""
                         })
                         seen_seven_titles.add(raw_title)
-
-                    if len(seven_data) >= 15: # 세븐일레븐 15개 제한
-                        break
+                        print(f"  -> 수집됨: {kr_title}")
+                        
         except Exception as e:
             print(f"🚨 세븐일레븐 에러: {e}")
             
     all_store_data["세븐일레븐"] = seven_data
-    print(f"✅ 세븐일레븐: {len(seven_data)}개 수집 완료")
+    print(f"✅ 세븐일레븐: 총 {len(seven_data)}개 수집 완료 (이번주+다음주 전체)")
 
     # ==========================================
-    # 🌟 2. 나머지 편의점 기존 방식 크롤링
+    # 🌟 2. 나머지 편의점 (기존 방식 유지, 제한 없음)
     # ==========================================
     for brand_name, url in TARGET_SITES.items():
         print(f"[{brand_name}] 크롤링 시작...")
@@ -123,15 +115,12 @@ def crawl_convenience_stores():
         try:
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code != 200:
-                print(f"⚠️ {brand_name} 접속 실패 (코드: {response.status_code})")
                 continue
 
             soup = BeautifulSoup(response.text, 'html.parser')
             main_content = soup.find('main') or soup.find(id='main') or soup.find(class_='main') or soup
-
             cards = main_content.select("article, .card, .item, .campaign-list li, .list li, li a, .box, .product-list li")
-            if not cards:
-                cards = main_content.select("a")
+            if not cards: cards = main_content.select("a")
 
             for card in cards:
                 title = ""
@@ -140,7 +129,6 @@ def crawl_convenience_stores():
                     title = title_tag.text.strip()
                 elif card.name == 'a' and len(card.text.strip()) > 5:
                     title = card.text.strip()
-                
                 title = re.sub(r'\s+', ' ', title).strip() 
 
                 if not title or len(title) < 4 or title in seen_titles or is_spam(title):
@@ -148,38 +136,33 @@ def crawl_convenience_stores():
 
                 date_text = "이벤트 진행중"
                 date_match = re.search(r'(\d{1,2}/\d{1,2}\s*\(.*?\))', title)
-                if date_match:
-                    date_text = date_match.group(1) + " 부터"
+                if date_match: date_text = date_match.group(1) + " 부터"
                 else:
                     date_tag = card.select_one(".date, time, .period")
-                    if date_tag and any(char.isdigit() for char in date_tag.text):
-                        date_text = date_tag.text.strip()
+                    if date_tag and any(char.isdigit() for char in date_tag.text): date_text = date_tag.text.strip()
 
                 try:
-                    time.sleep(1.0)
                     kr_title = translator.translate(title[:50])
                     kr_date = translator.translate(date_text[:30])
+                    time.sleep(0.5)
                 except:
-                    kr_title = title
-                    kr_date = date_text
+                    kr_title, kr_date = title, date_text
 
-                if is_spam(kr_title):
-                    continue
+                if is_spam(kr_title): continue
 
                 parsed_data.append({
                     "category": "🏪 편의점",
                     "brand": brand_name,
                     "title": kr_title,
+                    "price": "",  # 나머지 편의점은 빈칸
                     "date": kr_date,
+                    "region": "", # 나머지 편의점은 빈칸
                     "imageUrl": ""
                 })
                 seen_titles.add(title)
 
-                if len(parsed_data) >= 15:
-                    break
-
             all_store_data[brand_name] = parsed_data
-            print(f"✅ {brand_name}: {len(parsed_data)}개 수집 완료")
+            print(f"✅ {brand_name}: 총 {len(parsed_data)}개 수집 완료")
 
         except Exception as e:
             print(f"🚨 {brand_name} 크롤링 중 에러 발생: {e}")
@@ -205,4 +188,4 @@ if __name__ == "__main__":
         
         print("모든 편의점 파이어베이스 업데이트 완벽 성공! 🚀")
     else:
-        print("🚨 FIREBASE_KEY를 찾을 수 없습니다.")
+        print("🚨 FIREBASE_KEY를 찾을 수 없습니다.")ㄴ
