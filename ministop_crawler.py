@@ -9,7 +9,8 @@ import time
 import re
 from urllib.parse import urljoin
 
-MINISTOP_URL = "https://www.ministop.co.jp/syohin/"
+# 🌟 모든 상품이 모여있는 진짜 카탈로그 페이지 주소
+MINISTOP_LIST_URL = "https://www.ministop.co.jp/syohin/products/"
 
 BLOCK_KEYWORDS = [
     "アルバイト", "パート", "募集", "採用", "求人", "店舗検索", "会社案内", "加盟店", 
@@ -48,54 +49,66 @@ def crawl_ministop(db, deepl_key):
     trans_cache = cache_doc.to_dict() if cache_doc.exists else {}
     initial_cache_size = len(trans_cache)
 
-    print(f"[미니스톱] 정면 돌파 크롤링 시작... (현재 번역 노트에 {initial_cache_size}개 기억 중)")
+    print(f"[미니스톱] 전체 상품 싹 다 긁기 시작... (현재 번역 노트에 {initial_cache_size}개 기억 중)")
     ministop_data = []
     seen_titles = set()
 
     try:
-        response = requests.get(MINISTOP_URL, headers=headers, timeout=15)
+        response = requests.get(MINISTOP_LIST_URL, headers=headers, timeout=15)
         response.encoding = 'utf-8'
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 🌟 페이지 전체에서 상품 이미지와 링크가 담긴 배너/카드 요소들을 전부 타격합니다!
-            # 소스코드에 나왔던 productsBannerList 및 추천 영역의 링크들을 모두 수집합니다.
-            targets = soup.select("#productsBannerList li a, #recommendArea a, .productList a")
+            # 🌟 상품 목록 페이지 안의 모든 상품 카드(.productList li 또는 각 상품 박스)를 싹 다 타격합니다!
+            cards = soup.select(".productList li, .productBox, .itemBox, ul li")
             
-            for target in targets:
-                item_href = target.get('href', '')
-                item_url = urljoin("https://www.ministop.co.jp", item_href) if item_href else ""
+            for card in cards:
+                a_tag = card.select_one("a")
+                if not a_tag: continue
                 
-                # 이미지 alt 속성이나 텍스트에서 상품 이름을 추출합니다 (미니스톱은 alt에 상품명이 들어가 있습니다!)
-                img_tag = target.select_one("img")
+                item_href = a_tag.get('href', '')
+                if not item_href or "syohin" not in item_href: continue
+                
+                # 상세 페이지 링크 완성
+                item_url = urljoin("https://www.ministop.co.jp", item_href)
+                
+                # 상품 이름 추출 (span.name 또는 이미지 alt)
+                title_tag = card.select_one("span.name, p.name, .title")
                 raw_title = ""
-                if img_tag and img_tag.get('alt'):
-                    raw_title = img_tag.get('alt').strip()
-                elif target.text:
-                    raw_title = target.text.strip()
+                if title_tag:
+                    raw_title = title_tag.text.strip()
+                else:
+                    img_tag = card.select_one("img")
+                    if img_tag and img_tag.get('alt'):
+                        raw_title = img_tag.get('alt').strip()
                 
                 raw_title = re.sub(r'\s+', ' ', raw_title)
-                
                 if not raw_title or len(raw_title) < 2 or is_spam(raw_title) or raw_title in seen_titles: 
                     continue
                 
+                # 가격 추출 (span.price 등)
+                price_tag = card.select_one("span.price, p.price, .price")
+                raw_price = price_tag.text.strip() if price_tag else ""
+                raw_price = raw_price.replace("税込", "(税込").replace("円", "円)") 
+                
                 kr_title = smart_translate(raw_title, trans_cache, deepl_key)
+                kr_price = smart_translate(raw_price, trans_cache, deepl_key) if raw_price else ""
                 time.sleep(0.1)
 
                 ministop_data.append({
                     "category": "🏪 편의점",
                     "brand": "미니스톱",
                     "title": kr_title,
-                    "price": "", # 메인 배너에는 가격이 별도로 없어 빈값 처리
-                    "date": "이번 주 신상품",
+                    "price": kr_price,
+                    "date": "신상품",
                     "region": "전국 (일부 점포 제외)",
-                    "itemUrl": item_url,
+                    "itemUrl": item_url, # 🌟 누르면 정확한 제품 상세 페이지로 이동!
                     "week": "이번주",
                     "imageUrl": ""
                 })
                 seen_titles.add(raw_title)
-                print(f"  -> 수집됨: {kr_title}")
+                print(f"  -> 수집됨: {kr_title} / {kr_price}")
                     
         if len(trans_cache) > initial_cache_size:
             cache_ref.set(trans_cache)
